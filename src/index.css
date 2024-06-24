@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: "Playwrite DE Grund", cursive;
+  font-optical-sizing: auto;
+}
