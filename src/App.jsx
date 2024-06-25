@@ -164,7 +164,7 @@ const App = () => {
           selectsStart
           startDate={startDate}
           endDate={endDate}
-          className="border rounded px-2 py-1"
+          className="border rounded px-2 py-1 w-36"
         />
         <span className="mx-2">to</span>
         <DatePicker
@@ -173,7 +173,7 @@ const App = () => {
           selectsEnd
           startDate={startDate}
           endDate={endDate}
-          className="border rounded px-2 py-1"
+          className="border rounded px-2 py-1 w-36"
         />
       </div>
       {dateError && <div className="text-red-500 text-center mb-5">{dateError}</div>}
@@ -248,7 +248,7 @@ const App = () => {
             id="csvFileInput"
             accept=".csv"
             onChange={importFromCSV}
-            className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 "
+            className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 w-full"
           />
           <button
             onClick={exportToCSV}
