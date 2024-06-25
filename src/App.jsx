@@ -245,9 +245,10 @@ const App = () => {
         <div>
           <input
             type="file"
+            id="csvFileInput"
             accept=".csv"
             onChange={importFromCSV}
-            className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+            className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 "
           />
           <button
             onClick={exportToCSV}
