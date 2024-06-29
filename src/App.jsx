@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import DatePicker from 'react-datepicker';
 import Papa from 'papaparse';
+import { gapi } from 'gapi-script';
 import 'react-datepicker/dist/react-datepicker.css';
 import './index.css';
+
+const CLIENT_ID = '227217320704-n0fikqdg73pvch1gvvslrf6mjmjs2kt9.apps.googleusercontent.com';
+const API_KEY = 'AIzaSyBnJsALKryk0ucLiHw0ox6D6BwTGe4M7xE';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
 const getWeekendDays = (startDate, endDate) => {
   const days = [];
@@ -26,6 +31,11 @@ const App = () => {
   const [days, setDays] = useState(getWeekendDays(startDate, endDate));
   const [dateError, setDateError] = useState('');
   const [importMessage, setImportMessage] = useState('');
+  const [authInstance, setAuthInstance] = useState(null);
+
+  useEffect(() => {
+    gapi.load('client:auth2', initClient);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('attendanceData', JSON.stringify(students));
@@ -45,6 +55,30 @@ const App = () => {
       setDateError('Start date must be before end date.');
     }
   }, [startDate, endDate]);
+
+  const initClient = () => {
+    gapi.client.init({
+      apiKey: API_KEY,
+      clientId: CLIENT_ID,
+      discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+      scope: SCOPES,
+    }).then(() => {
+      const authInstance = gapi.auth2.getAuthInstance();
+      setAuthInstance(authInstance);
+    });
+  };
+
+  const signIn = () => {
+    if (authInstance) {
+      authInstance.signIn();
+    }
+  };
+
+  const signOut = () => {
+    if (authInstance) {
+      authInstance.signOut();
+    }
+  };
 
   const handleInputChange = (index, name, value) => {
     const newStudents = [...students];
@@ -115,6 +149,76 @@ const App = () => {
     link.click();
   };
 
+  const saveToDrive = async () => {
+    const headers = ['Name', ...days.map(day => day.toDateString()), 'Total Days', 'Days Present', 'Days Absent', 'Percentage'];
+    const rows = students.map(student => {
+      const { totalDays, totalPresent, totalAbsent, percentage } = calculateTotals(student.attendance);
+      return [
+        student.name,
+        ...student.attendance.map(attended => (attended ? 'Present' : 'Absent')),
+        totalDays,
+        totalPresent,
+        totalAbsent,
+        percentage
+      ];
+    });
+
+    let csvContent = headers.join(',') + '\n';
+    rows.forEach(row => {
+      csvContent += row.join(',') + '\n';
+    });
+
+    const file = new Blob([csvContent], { type: 'text/csv' });
+    const metadata = {
+      name: 'attendance.csv',
+      mimeType: 'text/csv',
+    };
+
+    const token = gapi.auth.getToken();
+    if (!token) {
+      console.error('Error: User is not authenticated');
+      return;
+    }
+    const accessToken = token.access_token;
+
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', file);
+
+    await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+      method: 'POST',
+      headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+      body: form,
+    });
+  };
+
+  const importFromDrive = async () => {
+    const response = await gapi.client.drive.files.list({
+      q: "name='attendance.csv'",
+      fields: 'files(id, name)',
+      spaces: 'drive',
+    });
+
+    const file = response.result.files[0];
+    if (file) {
+      const fileId = file.id;
+      const result = await gapi.client.drive.files.get({
+        fileId: fileId,
+        alt: 'media',
+      });
+
+      const parsedData = Papa.parse(result.body, { header: true });
+      const data = parsedData.data;
+      const newStudents = data.map(row => {
+        const name = row.Name;
+        const attendance = Object.keys(row).slice(1).map(key => row[key] === 'Present');
+        return { name, attendance };
+      });
+
+      setStudents(newStudents);
+    }
+  };
+
   const importFromCSV = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -123,14 +227,12 @@ const App = () => {
       complete: (result) => {
         const headers = result.data[0];
         const data = result.data.slice(1);
-        
-        // Validate headers
+
         if (headers.length !== days.length + 1 || headers[0] !== 'Name') {
           setImportMessage('Error: Invalid CSV format.');
           return;
         }
-        
-        // Validate data
+
         for (const row of data) {
           if (row.length !== headers.length) {
             setImportMessage('Error: Inconsistent row length.');
@@ -256,8 +358,32 @@ const App = () => {
           >
             Export to CSV
           </button>
+          <button
+            onClick={saveToDrive}
+            className="ml-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+          >
+            Save to Drive
+          </button>
+          <button
+            onClick={importFromDrive}
+            className="ml-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+          >
+            Import from Drive
+          </button>
         </div>
       </div>
+      <button
+        onClick={signIn}
+        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 mt-5"
+      >
+        Sign In with Google
+      </button>
+      <button
+        onClick={signOut}
+        className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 mt-5"
+      >
+        Sign Out
+      </button>
     </div>
   );
 };
