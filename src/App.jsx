@@ -388,6 +388,7 @@ const App = () => {
             })}
           </tbody>
         </table>
+        <Notification message={notification.message} type={notification.type} onClose={closeNotification} />
       </div>
       {importMessage && <div className="text-center my-5">{importMessage}</div>}
       <div className="flex justify-between mt-5">
