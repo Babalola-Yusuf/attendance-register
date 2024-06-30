@@ -6,3 +6,31 @@ body {
   font-family: "Playwrite DE Grund", cursive;
   font-optical-sizing: auto;
 }
+.notification {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: opacity 0.5s, transform 0.5s;
+}
+
+.notification.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.notification.success {
+  background-color: #38a169;
+  color: #fff;
+}
+
+.notification.error {
+  background-color: #e53e3e;
+  color: #fff;
+}
+
+.notification.info {
+  background-color: #3182ce;
+  color: #fff;
+}

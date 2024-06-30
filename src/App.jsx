@@ -5,8 +5,8 @@ import { gapi } from 'gapi-script';
 import 'react-datepicker/dist/react-datepicker.css';
 import './index.css';
 
-const CLIENT_ID = '227217320704-n0fikqdg73pvch1gvvslrf6mjmjs2kt9.apps.googleusercontent.com';
-const API_KEY = 'AIzaSyBnJsALKryk0ucLiHw0ox6D6BwTGe4M7xE';
+const CLIENT_ID = '227217320704-n0fikqdg73pvch1gvvslrf6mjmjs2kt9.apps.googleusercontent.com'; 
+const API_KEY = 'AIzaSyBnJsALKryk0ucLiHw0ox6D6BwTGe4M7xE'; 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
 const getWeekendDays = (startDate, endDate) => {
@@ -22,6 +22,25 @@ const getWeekendDays = (startDate, endDate) => {
 
 const initialData = JSON.parse(localStorage.getItem('attendanceData')) || [];
 
+const Notification = ({ message, type, onClose }) => {
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        onClose();
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [message, onClose]);
+
+  if (!message) return null;
+
+  return (
+    <div className={`notification ${type} show`}>
+      {message}
+    </div>
+  );
+};
+
 const App = () => {
   const [students, setStudents] = useState(initialData);
   const [newStudentIndex, setNewStudentIndex] = useState(null);
@@ -32,6 +51,7 @@ const App = () => {
   const [dateError, setDateError] = useState('');
   const [importMessage, setImportMessage] = useState('');
   const [authInstance, setAuthInstance] = useState(null);
+  const [notification, setNotification] = useState({ message: '', type: '' });
 
   useEffect(() => {
     gapi.load('client:auth2', initClient);
@@ -65,18 +85,28 @@ const App = () => {
     }).then(() => {
       const authInstance = gapi.auth2.getAuthInstance();
       setAuthInstance(authInstance);
+    }).catch(error => {
+      setNotification({ message: `Error initializing Google API client: ${error.message}`, type: 'error' });
     });
   };
 
   const signIn = () => {
     if (authInstance) {
-      authInstance.signIn();
+      authInstance.signIn().then(() => {
+        setNotification({ message: 'Signed in successfully.', type: 'success' });
+      }).catch(error => {
+        setNotification({ message: `Error signing in: ${error.message}`, type: 'error' });
+      });
     }
   };
 
   const signOut = () => {
     if (authInstance) {
-      authInstance.signOut();
+      authInstance.signOut().then(() => {
+        setNotification({ message: 'Signed out successfully.', type: 'success' });
+      }).catch(error => {
+        setNotification({ message: `Error signing out: ${error.message}`, type: 'error' });
+      });
     }
   };
 
@@ -147,6 +177,8 @@ const App = () => {
     link.setAttribute('download', 'attendance.csv');
     document.body.appendChild(link);
     link.click();
+
+    setNotification({ message: 'Data exported to CSV successfully.', type: 'success' });
   };
 
   const saveToDrive = async () => {
@@ -174,48 +206,60 @@ const App = () => {
       mimeType: 'text/csv',
     };
 
-    const token = gapi.auth.getToken();
-    if (!token) {
-      console.error('Error: User is not authenticated');
-      return;
+    try {
+      const token = gapi.auth.getToken();
+      if (!token) {
+        throw new Error('User is not authenticated');
+      }
+      const accessToken = token.access_token;
+
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', file);
+
+      await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+        method: 'POST',
+        headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+        body: form,
+      });
+
+      setNotification({ message: 'Data saved to Google Drive successfully.', type: 'success' });
+    } catch (error) {
+      setNotification({ message: `Error saving data to Google Drive: ${error.message}`, type: 'error' });
     }
-    const accessToken = token.access_token;
-
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', file);
-
-    await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
-      method: 'POST',
-      headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-      body: form,
-    });
   };
 
   const importFromDrive = async () => {
-    const response = await gapi.client.drive.files.list({
-      q: "name='attendance.csv'",
-      fields: 'files(id, name)',
-      spaces: 'drive',
-    });
-
-    const file = response.result.files[0];
-    if (file) {
-      const fileId = file.id;
-      const result = await gapi.client.drive.files.get({
-        fileId: fileId,
-        alt: 'media',
+    try {
+      const response = await gapi.client.drive.files.list({
+        q: "name='attendance.csv'",
+        fields: 'files(id, name)',
+        spaces: 'drive',
       });
 
-      const parsedData = Papa.parse(result.body, { header: true });
-      const data = parsedData.data;
-      const newStudents = data.map(row => {
-        const name = row.Name;
-        const attendance = Object.keys(row).slice(1).map(key => row[key] === 'Present');
-        return { name, attendance };
-      });
+      const file = response.result.files[0];
+      if (file) {
+        const fileId = file.id;
+        const result = await gapi.client.drive.files.get({
+          fileId: fileId,
+          alt: 'media',
+        });
 
-      setStudents(newStudents);
+        const parsedData = Papa.parse(result.body, { header: true });
+        const data = parsedData.data;
+        const newStudents = data.map(row => {
+          const name = row.Name;
+          const attendance = Object.keys(row).slice(1).map(key => row[key] === 'Present');
+          return { name, attendance };
+        });
+
+        setStudents(newStudents);
+        setNotification({ message: 'Data imported from Google Drive successfully.', type: 'success' });
+      } else {
+        setNotification({ message: 'No attendance.csv file found in Google Drive.', type: 'info' });
+      }
+    } catch (error) {
+      setNotification({ message: `Error importing data from Google Drive: ${error.message}`, type: 'error' });
     }
   };
 
@@ -230,12 +274,14 @@ const App = () => {
 
         if (headers.length !== days.length + 1 || headers[0] !== 'Name') {
           setImportMessage('Error: Invalid CSV format.');
+          setNotification({ message: 'Error: Invalid CSV format.', type: 'error' });
           return;
         }
 
         for (const row of data) {
           if (row.length !== headers.length) {
             setImportMessage('Error: Inconsistent row length.');
+            setNotification({ message: 'Error: Inconsistent row length.', type: 'error' });
             return;
           }
         }
@@ -248,17 +294,24 @@ const App = () => {
 
         setStudents(newStudents);
         setImportMessage('Import successful!');
+        setNotification({ message: 'Data imported from CSV successfully.', type: 'success' });
       },
       header: false,
       error: () => {
         setImportMessage('Error: Unable to parse CSV.');
+        setNotification({ message: 'Error: Unable to parse CSV.', type: 'error' });
       }
     });
+  };
+
+  const closeNotification = () => {
+    setNotification({ message: '', type: '' });
   };
 
   return (
     <div className="min-h-screen p-5 bg-gray-100">
       <h1 className="text-2xl font-bold mb-5 text-center text-blue-600">Attendance Register</h1>
+      <Notification message={notification.message} type={notification.type} onClose={closeNotification} />
       <div className="flex justify-center mb-5">
         <DatePicker
           selected={startDate}
@@ -295,7 +348,7 @@ const App = () => {
             </tr>
           </thead>
           <tbody>
-            {students.map((student, index) => {
+            {Array.isArray(students) && students.map((student, index) => {
               const { totalDays, totalPresent, totalAbsent, percentage } = calculateTotals(student.attendance);
               return (
                 <tr key={index} className={`border-b ${index % 2 === 0 ? 'bg-gray-100' : 'bg-white'}`}>
