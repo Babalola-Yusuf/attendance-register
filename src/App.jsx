@@ -52,6 +52,7 @@ const App = () => {
   const [importMessage, setImportMessage] = useState('');
   const [authInstance, setAuthInstance] = useState(null);
   const [notification, setNotification] = useState({ message: '', type: '' });
+  const [isSignedIn, setIsSignedIn] = useState(false);
 
   useEffect(() => {
     gapi.load('client:auth2', initClient);
@@ -85,6 +86,10 @@ const App = () => {
     }).then(() => {
       const authInstance = gapi.auth2.getAuthInstance();
       setAuthInstance(authInstance);
+      if (authInstance.isSignedIn.get()) {
+        setIsSignedIn(true);
+        setNotification({ message: 'Already signed in.', type: 'info' });
+      }
     }).catch(error => {
       setNotification({ message: `Error initializing Google API client: ${error.message}`, type: 'error' });
     });
@@ -93,6 +98,7 @@ const App = () => {
   const signIn = () => {
     if (authInstance) {
       authInstance.signIn().then(() => {
+        setIsSignedIn(true);
         setNotification({ message: 'Signed in successfully.', type: 'success' });
       }).catch(error => {
         setNotification({ message: `Error signing in: ${error.message}`, type: 'error' });
@@ -103,6 +109,7 @@ const App = () => {
   const signOut = () => {
     if (authInstance) {
       authInstance.signOut().then(() => {
+        setIsSignedIn(false);
         setNotification({ message: 'Signed out successfully.', type: 'success' });
       }).catch(error => {
         setNotification({ message: `Error signing out: ${error.message}`, type: 'error' });
@@ -426,18 +433,21 @@ const App = () => {
           </button>
         </div>
       </div>
-      <button
-        onClick={signIn}
-        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 mt-5"
-      >
-        Sign In with Google
-      </button>
-      <button
-        onClick={signOut}
-        className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 mt-5"
-      >
-        Sign Out
-      </button>
+      {!isSignedIn ? (
+        <button
+          onClick={signIn}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 mt-5"
+        >
+          Sign In with Google
+        </button>
+      ) : (
+        <button
+          onClick={signOut}
+          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 mt-5"
+        >
+          Sign Out
+        </button>
+      )}
     </div>
   );
 };
